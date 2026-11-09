@@ -1,6 +1,7 @@
 langchain==0.3.26
 langchain-groq
 flask==3.1.1
+flask-limiter
 sentence-transformers==4.1.0
 pypdf==5.6.1
 python-dotenv==1.1.0
@@ -11,4 +12,7 @@ langchain-huggingface==0.1.2
 openai==1.109.1
 rank_bm25
 langgraph
+gunicorn
+pillow
+pytest
 -e .

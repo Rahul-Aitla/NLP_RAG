@@ -1,0 +1,41 @@
+# P0.1 — never bake secrets, venvs, VCS metadata, or caches into the image.
+# NOTE: data/ is intentionally NOT excluded: app.py rebuilds the BM25
+# sparse index from data/ at boot (build_hybrid_retriever default
+# data_dir="data/"). Excluding it would silently break retrieval.
+.env
+.env.*
+!.env.example
+.venv
+.venv/
+**/.venv/**
+venv
+venv/
+**/venv/**
+ENV
+ENV/
+**/ENV/
+__pycache__
+__pycache__/
+**/__pycache__/**
+*.py[cod]
+*.egg-info
+*.egg-info/
+**/*.egg-info/**
+.git
+.git/
+**/.git/**
+.github
+.github/
+**/.github/**
+.pytest_cache
+.pytest_cache/
+**/.pytest_cache/**
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage*
+.coverage.*
+dist/
+build/
+*.log
+.DS_Store

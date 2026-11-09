@@ -32,7 +32,7 @@ isn't in the documents.
 - Python
 - LangChain
 - LangGraph
-- Groq (Llama-3.3-70B)
+- Groq (model id via `GROQ_MODEL`, default `openai/gpt-oss-120b`; see `.env.example`)
 - Pinecone
 - HuggingFace Embeddings
 - BM25 + Cross-Encoder Re-ranking

@@ -182,13 +182,30 @@ function saveStore() {
 
 
 /* ---------- chat lifecycle ---------- */
-function newChat() {
+async function mintThread() {
+    // P1.7: thread ids are minted server-side and bound to this session.
+    try {
+        const res = await fetch('/new-thread', { method: 'POST', credentials: 'same-origin' });
+        if (res.ok) {
+            const data = await res.json();
+            if (data.thread_id) return data.thread_id;
+        }
+    } catch (e) { /* fall through to local fallback */ }
+    return null;
+}
+
+async function newChat() {
     const id = uid();
     chats[id] = { id, title: 'New chat', ts: Date.now(), messages: [] };
     current = id;
     saveStore();
     renderHistory();
     renderMessages();
+    // Bind a server thread; the local id stays as the display key.
+    const tid = await mintThread();
+    if (tid) chats[id].thread = tid;
+    else chats[id].thread = null;
+    saveStore();
     document.getElementById('input').focus();
 }
 
@@ -322,13 +339,40 @@ async function send(preset) {
     try {
         const form = new FormData();
         form.append('msg', text);
-        form.append('thread_id', current);        // per-chat memory key
+        // Prefer the server-issued thread; older local chats may not have one.
+        if (chat.thread) form.append('thread_id', chat.thread);
 
-        const res = await fetch('/get', { method: 'POST', body: form });
-        const answer = await res.text();
+        async function post(threadId) {
+            const f = new FormData();
+            f.append('msg', text);
+            if (threadId) f.append('thread_id', threadId);
+            return fetch('/get', { method: 'POST', body: f, credentials: 'same-origin' });
+        }
 
-        // highlight guardrail / fallback replies
-        const alert = /emergency|not able to give diagnoses|could not find this information/i.test(answer);
+        let res = await post(chat.thread || null);
+        if (res.status === 403 || res.status === 400) {
+            // Unknown/expired thread (or legacy local id): mint a fresh
+            // server thread once and retry so the user is never stuck.
+            const tid = await mintThread();
+            if (tid) {
+                chat.thread = tid;
+                saveStore();
+                res = await post(tid);
+            }
+        }
+        let answer;
+        let alert = true;
+        if (res.ok) {
+            answer = await res.text();
+            // highlight guardrail / fallback replies
+            alert = /emergency|not able to give diagnoses|could not find this information/i.test(answer);
+        } else if (res.status === 429) {
+            answer = 'Too many requests — please wait a moment and try again.';
+        } else if (res.status === 413) {
+            answer = 'That message is too long. Please shorten it and try again.';
+        } else {
+            answer = 'Sorry, the service is temporarily unavailable. Please try again shortly.';
+        }
         chat.messages.push({ role: 'bot', text: answer, time: nowTime(), alert });
     } catch (e) {
         chat.messages.push({ role: 'bot', text: 'Sorry, something went wrong. Please try again.', time: nowTime(), alert: true });
@@ -368,9 +412,27 @@ async function sendImage(input) {
         form.append('image', file);
         form.append('msg', '');
 
-        const res = await fetch('/analyze-image', { method: 'POST', body: form });
-        const answer = await res.text();
-        chat.messages.push({ role: 'bot', text: answer, time: nowTime() });
+        const res = await fetch('/analyze-image', { method: 'POST', body: form, credentials: 'same-origin' });
+        let answer;
+        let alert = false;
+        if (res.ok) {
+            answer = await res.text();
+        } else if (res.status === 429) {
+            answer = 'Too many image requests — please wait a moment and try again.';
+            alert = true;
+        } else if (res.status === 413) {
+            answer = 'That image is too large. Please use an image under 5 MB.';
+            alert = true;
+        } else {
+            try {
+                const err = await res.json();
+                answer = (err && err.error && err.error.message) || 'Could not analyze the image. Please try again.';
+            } catch (e2) {
+                answer = 'Could not analyze the image. Please try again.';
+            }
+            alert = true;
+        }
+        chat.messages.push({ role: 'bot', text: answer, time: nowTime(), alert });
     } catch (e) {
         chat.messages.push({ role: 'bot', text: 'Could not analyze the image. Please try again.', time: nowTime(), alert: true });
     }
